@@ -29,22 +29,7 @@
 
 #define MIN(x,y) (((x) > (y) ) ? (y) : (x) )
 #define MAX(x,y) (((x) < (y) ) ? (y) : (x) )
-char * * g_argv; // Global Argv
-int g_argc; // Global Argc
-#define TXBUFSIZE    ((g_argc<3) ?100000:(atoi(g_argv[2])))  
-#define INIT_TIMEOUT (((g_argc<4) ?(300*1000):(atoi(g_argv[3])*1000))/TIMER_USECS)  
-#define INV_LOSS_RATE    ((g_argc<6) ?10000:(atoi(g_argv[5])))  
 
-char * usage_string = "%s <port> [<TXBUFSIZE (default 100K)>] [<TIMEOUT msec (default 300)>] [MODE: <SRV|CLN> (default SRV)] [1/LOSSRATE <1/N> (default 10000)\n";
-unsigned char  mssopt[4] = { 0x02, 0x04, 0x05, 0x90};
-struct sigaction action_io, action_timer;
-sigset_t mymask;
-unsigned char l2buffer[MAXFRAME];
-struct sockaddr_ll;
-struct pollfd fds[1];
-int fdfl;
-long long int tick=0; 
-int unique_s;
 int fl;
 
 struct sockaddr_ll sll;
@@ -274,22 +259,7 @@ unsigned char mac[6]; //Mac address
 #define TCP_CLOSED 10 // initial state
 #define LISTEN 11  // represents waiting for a connection request from any remote TCP and port.
 
-#define SYN_SENT 12 // represents waiting for a matching connection request after having sent a connection request.
 
-#define SYN_RECEIVED 13 //  represents waiting for a confirming connection request acknowledgment after having both received and sent a connection request.
-
-#define ESTABLISHED 14 // - represents an open connection, data received can be delivered to the user.  The normal state for the data transfer phase of the connection.
-#define FIN_WAIT_1 15 // waiting for a connection termination request from the remote TCP, or an acknowledgment of the conne
-#define FIN_WAIT_2 16 // waiting for a connection termination request from the remote TCP.
-#define CLOSE_WAIT 17 // waiting for a connection termination request from the local user.
-#define CLOSING 18  // waiting for a connection termination request acknowledgment from the remote TCP.
-#define LAST_ACK 19 // waiting for an acknowledgment of the connection termination request previously sent to the remote TCP
-#define TIME_WAIT 20 //waiting for enough time to pass to be sure the remote TCP received the acknowledgment of its connecti
-
-#define FIN 0x01
-#define SYN 0x02
-#define RST	0x04
-#define PSH 0x08
 #define ACK 0x10
 #define URG 0x20
 int myerrno;
@@ -481,15 +451,7 @@ RFC 5681 page 9:
 					  tcb->repeated_acks=0;
 					}
 					break;
-        }
-						tcb->last_ack = tcp->ack; //in network order
-		}
-	else if (event == TIMEOUT) {
-						if(tcb->cong_st == CONG_AVOID) tcb->ssthreshold= MAX(tcb->flightsize/2,2*tcb->mss);
-						if(tcb->cong_st == FAST_RECOV) tcb->ssthreshold=MAX(tcb->mss,tcb->ssthreshold/=2);
-						if(tcb->cong_st == SLOW_START) tcb->ssthreshold=MAX(tcb->mss,tcb->ssthreshold/=2);
-						tcb->cgwin = INIT_CGWIN* tcb->mss;
-						tcb->timeout = MIN( MAXRTO, tcb->timeout*2);
+        }>timeout*2);
 						tcb->rtt_e = 0; /* RFC 6298 Note 2 page 6 */
 						printf(" TIMEOUT: --->SLOW_START\n");
 						tcb->cong_st = SLOW_START;
@@ -653,7 +615,15 @@ if (p<MAX_PORT) return last_port=p;
 for ( p = MIN_PORT; p<last_port && port_in_use(p); p++);
 if (p<last_port) return last_port=p;
 return 0;
-}
+}(i=0;i<6;i++) arp->srcmac[i]=mymac[i];
+for(i=0;i<4;i++) arp->srcip[i]=myip[i];
+for(i=0;i<6;i++) arp->dstmac[i]=0;
+for(i=0;i<4;i++) arp->dstip[i]=((unsigned char*) &destip)[i];
+//printbuf(pkt,14+sizeof(struct arp_packet));
+bzero(&sll,sizeof(struct sockaddr_ll));
+sll.sll_family = AF_PACKET;
+sll.sll_ifindex = if_nametoindex("eth0");
+len = sizeof(sll);
 
 int mybind(int s, struct sockaddr * addr, int addrlen){
 if((addr->sa_family == AF_INET)){
@@ -833,7 +803,15 @@ case CLOSING:
 						free(tmp);
 					  }
 				}
-				
+				(i=0;i<6;i++) arp->srcmac[i]=mymac[i];
+for(i=0;i<4;i++) arp->srcip[i]=myip[i];
+for(i=0;i<6;i++) arp->dstmac[i]=0;
+for(i=0;i<4;i++) arp->dstip[i]=((unsigned char*) &destip)[i];
+//printbuf(pkt,14+sizeof(struct arp_packet));
+bzero(&sll,sizeof(struct sockaddr_ll));
+sll.sll_family = AF_PACKET;
+sll.sll_ifindex = if_nametoindex("eth0");
+len = sizeof(sll);
   break;
 
 
@@ -912,17 +890,7 @@ if(-1 == sigprocmask(SIG_UNBLOCK, &mymask, NULL)){perror("sigprocmask"); return 
 return totlen;	
 } 
 
-
-int myread(int s, unsigned char *buffer, int maxlen)
-{
-int j,actual_len;
-if((fdinfo[s].st != TCB_CREATED) || (fdinfo[s].tcb->st < ESTABLISHED )){ myerrno = EINVAL; return -1; }
-if (maxlen==0) return 0;
-actual_len = MIN(maxlen,fdinfo[s].tcb->cumulativeack - fdinfo[s].tcb->rx_win_start);
-if(fdinfo[s].tcb->cumulativeack > fdinfo[s].tcb->stream_end) actual_len --;
-if(actual_len==0){
-		while(pause()){
-			actual_len = MIN(maxlen,fdinfo[s].tcb->cumulativeack - fdinfo[s].tcb->rx_win_start);
+en,fdinfo[s].tcb->cumulativeack - fdinfo[s].tcb->rx_win_start);
 			if(actual_len>0 && (fdinfo[s].tcb->cumulativeack > fdinfo[s].tcb->stream_end)) actual_len --;
 			if(actual_len!=0) break;		
 			if(fdinfo[s].tcb->rx_win_start) 
